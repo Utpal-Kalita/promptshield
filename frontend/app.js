@@ -51,7 +51,7 @@ priya.nair@example.com
 Kochi`,
   draft: `Hi Priya,
 
-I'm sorry the lamp arrived with a cracked base. I've checked your order and here is what I can do: since the lamp arrived damaged, you are due a full refund to your original payment method, and you do not need to send the damaged lamp back. Once approved, the refund is processed within 5 to 7 business days.
+I'm sorry the lamp arrived with a cracked base. Since the lamp arrived damaged, you are due a full refund to your original payment method. You do not need to send the damaged lamp back. Once approved, the refund is processed within 5 to 7 business days.
 
 Is there anything else I can help with?`,
 };
