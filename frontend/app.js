@@ -12,6 +12,7 @@
    Failure rule: if a check errors or is unreachable it is shown as UNAVAILABLE and pushes
    the review to HOLD. A failed check is never rendered as an attack and never as a pass. */
 
+let uiClaims = [], selectedClaim = 0, latestAnalyze = null, latestTicket = "", maskedTicket = null, isMasked = false, reviewActive = false;
 const API_BASE = window.PROMPTSHIELD_API_BASE || 'https://promptshield-api.adzeo2.workers.dev';
 
 const $ = (sel) => document.querySelector(sel);
@@ -95,7 +96,7 @@ function clearError() { errorBox.hidden = true; }
 
 function updateCounts() {
   $('#ticketCount').textContent = ticketInput.value.length.toLocaleString();
-  $('#draftCount').textContent = draftInput.value.length.toLocaleString();
+
   $('#scriptCount').textContent = scriptInput.value.length.toLocaleString();
   $('#policyCount').textContent = `${policyInput.value.length.toLocaleString()} / 20,000`;
 }
@@ -266,12 +267,13 @@ function renderProtect(resp, ticket) {
   if (!resp || !resp.ok) return { ...apiUnavailable(card, resp, 'private-data scan'), found: 0 };
 
   const d = unwrap(resp);
-  const entities = Array.isArray(d?.entities) ? d.entities : [];
+  if (!d || !Array.isArray(d.entities)) return {...apiUnavailable(card,null,'private-data scan'),found:0};
+  const entities = d.entities;
 
   if (entities.length === 0) {
     card.classList.add('clean');
     setChip(card, 'No findings', 'ok');
-    setBody(card, '<p>No personal data detected in the ticket, as far as this model can tell. The ticket can be logged as-is.</p>');
+    setBody(card, '<p>No personal data detected in the ticket, as far as this model can tell. This is not proof the ticket contains no private data.</p>');
     return { found: 0, masked: ticket };
   }
 
@@ -280,10 +282,10 @@ function renderProtect(resp, ticket) {
   const counts = d?.counts && typeof d.counts === 'object'
     ? Object.entries(d.counts).map(([k, v]) => `${v} ${escapeHtml(k)}`).join(' · ')
     : null;
-  let html = `<p>Personal data found in the ticket${counts ? ` (${counts})` : ''}. The customer shared it, so the reply can go ahead - but log the masked copy, not the original. Masking removes the private values only; it does not remove injections or risky instructions.</p>`;
+  let html = `<p>Personal data found in the ticket${counts ? ` (${counts})` : ''}. This view shows a masked copy. Masking alone does not authorize sending or logging anything. Masking removes the private values only; it does not remove injections or risky instructions.</p>`;
   html += '<div class="diff-grid">';
   html += `<div class="diff-col"><h3>Original</h3><div class="diff-view">${escapeHtml(ticket)}</div></div>`;
-  html += `<div class="diff-col"><h3>Masked for logs</h3><div class="masked-view">${maskTextHtml(ticket, entities)}</div></div>`;
+  html += `<div class="diff-col"><h3>Masked copy</h3><div class="masked-view">${maskTextHtml(ticket, entities)}</div></div>`;
   html += '</div>';
   setBody(card, html);
   return { found: entities.length, masked: maskTextPlain(ticket, entities) };
@@ -299,6 +301,7 @@ function renderGuard(resp, ticket) {
   const verdict = (d?.verdict || '').toString().toLowerCase();
   const threshold = typeof d?.threshold === 'number' ? d.threshold : 0.5;
   const prob = typeof d?.injection === 'number' ? d.injection : null;
+  if (!verdict && prob == null) return {...apiUnavailable(card,null,'injection screen'),flagged:null};
   const flagged = verdict !== '' ? verdict !== 'benign' : (prob != null && prob >= threshold);
   const category = d?.category || null;
   const severity = d?.severity || null;
@@ -340,6 +343,7 @@ function renderInspect(resp, hadScript) {
   const verdict = (d?.verdict || '').toString().toLowerCase();
   const threshold = typeof d?.threshold === 'number' ? d.threshold : 0.5;
   const malProb = typeof d?.malicious === 'number' ? d.malicious : null;
+  if (!['malicious','suspicious','benign'].includes(verdict) && malProb == null) return {...apiUnavailable(card,null,'script inspection'),level:'unknown'};
   let level;
   if (verdict === 'malicious') level = 'malicious';
   else if (verdict === 'suspicious') level = 'suspicious';
@@ -421,6 +425,7 @@ function renderVerify(ground) {
 
   const vd = verify.data || {};
   const claims = (vd.claims || []).filter((c) => c.counted !== false);
+  uiClaims = [];
   let unverifiedCount = 0;
   let contradictedCount = 0;
   let notStatedCount = 0;
@@ -446,6 +451,7 @@ function renderVerify(ground) {
     if (unverified || cv === 'contradicted' || cv === 'not_stated') issueClaims++;
     const tone = unverified ? 'warn' : (VERIFY_TONE[cv] || '');
     const label = 'model: ' + cv.replace(/_/g, ' ') + (unverified ? ' (unverified)' : '');
+    uiClaims.push({text:c.claim || '', verdict:cv, unverified, passage:near, label, tone});
     const src = near
       ? `<div class="claim-src">Nearest policy passage (word-overlap hint, not model evidence): &ldquo;${escapeHtml(near.slice(0, 140))}&rdquo;</div>`
       : '<div class="claim-src">No plausible backing passage found in the policy.</div>';
@@ -473,7 +479,9 @@ function renderVerify(ground) {
     }
   }
 
-  const clean = issueClaims === 0;
+  const rankUnavailable = !rerank || !rerank.ok;
+  if (rankUnavailable) html += '<p class="caveat"><b>Rerank unavailable.</b> Relevance ranking did not run. The review cannot clear on this point.</p>';
+  const clean = issueClaims === 0 && !rankUnavailable;
   card.classList.add(clean ? 'clean' : 'flagged');
   setChip(card,
     clean ? 'No findings' : `${issueClaims} claim${issueClaims === 1 ? '' : 's'} need review`,
@@ -481,6 +489,7 @@ function renderVerify(ground) {
   setBody(card, html);
   return {
     claims: clean ? 'clean' : 'issues',
+    rankUnavailable,
     issueClaims,
     contradicted: contradictedCount,
     notStated: notStatedCount,
@@ -491,55 +500,16 @@ function renderVerify(ground) {
 /* ---------- overall verdict ---------- */
 
 function renderVerdict({ guard, protect, verify, inspect, scriptRan }) {
-  const reasons = [];
-  let state = 'ok';
-
-  const unavailable = [];
-  if (guard.flagged === null) unavailable.push('the injection screen');
-  if (protect.unavailable) unavailable.push('the private-data scan');
-  if (verify.claims === 'unknown') unavailable.push('the policy grounding');
-  if (scriptRan && inspect.level === 'unknown') unavailable.push('the script inspection');
-
-  if (scriptRan && inspect.level === 'malicious') {
-    state = 'blocked';
-    reasons.push('The script in this conversation is flagged as malicious - nobody should run it or tell the customer to.');
-  }
-  if (guard.flagged === true) {
-    if (state !== 'blocked') state = 'warn';
-    reasons.push('The ticket contains a hidden instruction aimed at the agent. The customer\u2019s real request is preserved in step 1 - answer that, ignore the injected lines.');
-  }
-  if (verify.claims === 'issues') {
-    if (state !== 'blocked') state = 'warn';
-    const bits = [];
-    if (verify.contradicted) bits.push(`${verify.contradicted} contradicted by the policy`);
-    if (verify.notStated) bits.push(`${verify.notStated} not in the policy at all`);
-    if (verify.unverified) bits.push(`${verify.unverified} unverified (no backing evidence)`);
-    reasons.push(`${verify.issueClaims} claim${verify.issueClaims === 1 ? '' : 's'} in the draft need review: ${bits.join(', ')}. See step 3.`);
-  }
-  if (scriptRan && inspect.level === 'suspicious') {
-    if (state === 'ok') state = 'warn';
-    reasons.push('The script is suspicious - someone must read it line by line before it runs.');
-  }
-  if (unavailable.length) {
-    if (state === 'ok') state = 'warn';
-    reasons.push(`Review incomplete: ${unavailable.join(', ')} did not run, so those points are unknown, not clear.`);
-  }
-
-  verdictBanner.classList.remove('loading');
-  if (state === 'blocked') {
-    verdictBanner.className = 'verdict-banner blocked';
-    verdictBanner.innerHTML = 'BLOCK - do not send, do not run anything' +
-      `<span class="verdict-sub">${reasons.map(escapeHtml).join('<br>')}<br>A person needs to handle this ticket and this script by hand.</span>`;
-  } else if (state === 'warn') {
-    verdictBanner.className = 'verdict-banner warn';
-    verdictBanner.innerHTML = 'HOLD FOR REVIEW' +
-      `<span class="verdict-sub">${reasons.map(escapeHtml).join('<br>')}</span>`;
-  } else {
-    verdictBanner.className = 'verdict-banner ok';
-    verdictBanner.innerHTML = 'READY TO SEND - a human still confirms' +
-      '<span class="verdict-sub">No findings in any check, and every claim in the draft traces to the policy. ' +
-      'This is a model-reported result, not a guarantee: skim the evidence below, then a person sends the reply.</span>';
-  }
+  const reasons = []; let state = 'ok';
+  if (scriptRan && inspect.level === 'malicious') {state = 'blocked'; reasons.push('Script flagged as malicious. Do not run it.');}
+  if (guard.flagged === true) {if(state !== 'blocked') state='warn'; reasons.push('Hidden instruction flagged in the ticket. Keep the real request.');}
+  if (verify.claims === 'issues') {if(state !== 'blocked') state='warn'; if(verify.issueClaims) reasons.push(`${verify.issueClaims} draft claim${verify.issueClaims===1?'':'s'} need human review.`);}
+  if (scriptRan && inspect.level === 'suspicious') {if(state !== 'blocked') state='warn'; reasons.push('Script needs human inspection.');}
+  const incomplete = guard.flagged === null || protect.unavailable || verify.claims === 'unknown' || verify.rankUnavailable || (scriptRan && inspect.level === 'unknown');
+  if(incomplete){if(state !== 'blocked') state='warn'; reasons.push('Review incomplete: unavailable checks are unknown, not clear.');}
+  const title=state==='blocked'?'BLOCK FOR HUMAN REVIEW':state==='warn'?'HOLD FOR HUMAN REVIEW':'NO BLOCKING FINDINGS';
+  verdictBanner.className='verdict-banner '+state;
+  verdictBanner.innerHTML='<span class="decision-label">Decision</span><strong>'+title+'</strong><span class="decision-detail">'+escapeHtml(reasons.join(' ') || 'A human still checks the evidence and decides. Model results are not guarantees.')+'</span>';
 }
 
 /* ---------- run ---------- */
@@ -547,7 +517,10 @@ function renderVerdict({ guard, protect, verify, inspect, scriptRan }) {
 function loadingState(scriptExpected) {
   results.hidden = false;
   verdictBanner.className = 'verdict-banner loading';
-  verdictBanner.textContent = 'Reviewing the reply - this takes a few seconds…';
+  verdictBanner.innerHTML = '<span class="decision-label">Decision</span><strong>Reviewing…</strong><span class="decision-detail">Clocked model checks are running. Nothing is being sent or executed.</span>';
+  uiClaims=[]; selectedClaim=0; renderDocument();
+  $('#evidenceMode').textContent='Running';
+  $('#claimInspector').innerHTML='<p class="empty-evidence">Reviewing the draft against the supplied policy…</p>';
   for (const id of ['cardGuard', 'cardProtect', 'cardVerify', 'cardInspect']) {
     const card = document.getElementById(id);
     card.className = 'rail-step';
@@ -573,8 +546,10 @@ reviewBtn.addEventListener('click', async () => {
 
   reviewBtn.disabled = true;
   reviewBtn.textContent = 'Reviewing…';
+  reviewActive=true;
+  for(const el of [ticketInput,draftInput,policyInput,scriptInput,...document.querySelectorAll('.scenario,.new-review,[data-sample],#editDraftBtn')]) el.disabled=true;
   loadingState(Boolean(script));
-  results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
 
   let analyze = null;
   let ground = null;
@@ -612,8 +587,10 @@ reviewBtn.addEventListener('click', async () => {
   const inspect = renderInspect(analyze ? (analyze.inspect || analyze.script || null) : null, Boolean(script));
   const verify = ground ? renderVerify(ground) : { ...apiUnavailable($('#cardVerify'), null, 'policy grounding'), claims: 'unknown' };
 
+  latestAnalyze=analyze; latestTicket=ticket; maskedTicket=protect.masked || null;
+  $('#maskToggle').hidden=!maskedTicket;
   const draftReview = $('#draftReview');
-  draftReview.hidden = false;
+  draftReview.hidden = true;
   draftReview.innerHTML = '<h3>The draft under review</h3>' +
     `<div class="diff-view">${escapeHtml(draft)}</div>`;
 
@@ -630,7 +607,12 @@ reviewBtn.addEventListener('click', async () => {
   }
 
   reviewBtn.disabled = false;
-  reviewBtn.textContent = 'Review this reply';
+  reviewBtn.textContent = 'Review reply';
+  reviewActive=false;
+  for(const el of [ticketInput,draftInput,policyInput,scriptInput,...document.querySelectorAll('.scenario,.new-review,[data-sample],#editDraftBtn')]) el.disabled=false;
+  $('#evidenceMode').textContent='Model-reported';
+  renderDocument(); renderInspector(); renderTicketFinding(guard);
+  $('#draftInput').hidden=true; $('#draftDocument').hidden=false; $('#editDraftBtn').textContent='Edit draft';
 });
 
 /* ---------- fixture buttons ---------- */
@@ -640,16 +622,14 @@ $('#cleanBtn').addEventListener('click', () => {
   draftInput.value = CLEAN.draft;
   policyInput.value = POLICY;
   scriptInput.value = '';
-  updateCounts();
-  clearError();
+  updateCounts(); clearError(); resetWorkspace();
 });
 $('#attackBtn').addEventListener('click', () => {
   ticketInput.value = ATTACK.ticket;
   draftInput.value = ATTACK.draft;
   policyInput.value = POLICY;
   scriptInput.value = '';
-  updateCounts();
-  clearError();
+  updateCounts(); clearError(); resetWorkspace();
 });
 $('#clearBtn').addEventListener('click', () => {
   ticketInput.value = '';
@@ -658,7 +638,7 @@ $('#clearBtn').addEventListener('click', () => {
   scriptInput.value = '';
   updateCounts();
   results.hidden = true;
-  clearError();
+  clearError(); resetWorkspace();
 });
 
 // Ctrl+Enter runs the review from any field.
@@ -667,3 +647,62 @@ document.addEventListener('keydown', (e) => {
     reviewBtn.click();
   }
 });
+
+/* Paper-document workspace, adapted from the Lovable-generated prototype.
+   Real model calls and conservative evidence rules remain in this app. */
+function setPane(pane) {
+  $('.workspace').dataset.mobile=pane;
+  document.querySelectorAll('[data-pane]').forEach(b=>b.classList.toggle('active',b.dataset.pane===pane));
+  if(pane==='ticket'||pane==='policy') setInputTab(pane);
+}
+function setInputTab(tab) {
+  document.querySelectorAll('[data-input-tab]').forEach(b=>b.classList.toggle('active',b.dataset.inputTab===tab));
+  document.querySelectorAll('[data-input-section]').forEach(s=>s.hidden=s.dataset.inputSection!==tab);
+}
+function resetWorkspace() {
+  if(reviewActive)return;
+  uiClaims=[]; selectedClaim=0; latestAnalyze=null; maskedTicket=null; isMasked=false;
+  $('#maskToggle').hidden=true; $('#ticketRead').hidden=true; ticketInput.hidden=false;
+  $('#ticketFinding').hidden=true; results.hidden=true;
+  $('#claimInspector').innerHTML='<p class="empty-evidence">Run a review to inspect the draft’s claims beside policy passage hints.</p>';
+  $('#evidenceMode').textContent='Awaiting review';
+  verdictBanner.className='verdict-banner idle';
+  verdictBanner.innerHTML='<span class="decision-label">Decision</span><strong>Not reviewed</strong><span class="decision-detail">Review the draft before deciding what to send.</span>';
+  $('#draftInput').hidden=true; $('#draftDocument').hidden=false; $('#editDraftBtn').textContent='Edit draft';
+  renderDocument();
+}
+function renderDocument() {
+  let spans=[];
+  uiClaims.forEach((c,i)=>{const at=draftInput.value.toLowerCase().indexOf(c.text.toLowerCase());if(at>=0&&c.text.length>4&&c.verdict!=='not_a_claim')spans.push({at,end:at+c.text.length,i});});
+  spans.sort((a,b)=>a.at-b.at);let pos=0,html='';
+  for(const sp of spans){if(sp.at<pos)continue;html+=escapeHtml(draftInput.value.slice(pos,sp.at));html+=`<mark class="claim-mark ${sp.i===selectedClaim?'selected':''}" tabindex="0" role="button" data-claim="${sp.i}" aria-label="Inspect claim ${sp.i+1}">${escapeHtml(draftInput.value.slice(sp.at,sp.end))}<sup>${sp.i+1}</sup></mark>`;pos=sp.end;}
+  html+=escapeHtml(draftInput.value.slice(pos));
+  $('#draftDocument').innerHTML=html||'<span style="color:var(--muted)">No draft yet. Choose Edit draft to paste one, or load a sample.</span>';
+  document.querySelectorAll('[data-claim]').forEach(el=>{const pick=()=>{selectedClaim=Number(el.dataset.claim);renderDocument();renderInspector();if(window.innerWidth<=900)setPane('evidence');};el.addEventListener('click',pick);el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});});
+}
+function renderInspector() {
+  if(!uiClaims.length){$('#claimInspector').innerHTML='<p class="empty-evidence">No claim evidence available. Inspect the checks below. No findings is not proof of safety.</p>';return;}
+  const c=uiClaims[selectedClaim]||uiClaims[0];
+  const unmatched=!draftInput.value.toLowerCase().includes(c.text.toLowerCase());
+  $('#claimInspector').innerHTML='<div class="claim-tabs">'+uiClaims.map((x,i)=>`<button data-select-claim="${i}" class="${i===selectedClaim?'active':''}">Claim ${i+1}</button>`).join('')+'</div>'+`<section class="inspector-block"><div class="eyebrow">Claim ${selectedClaim+1}<span class="chip ${c.tone}">${escapeHtml(c.unverified?'UNVERIFIED':c.verdict.replace(/_/g,' '))}</span></div><div class="claim-quote">${escapeHtml(c.text)}</div>${unmatched?'<small>Model-identified claim. No exact draft span returned, so the original is not highlighted.</small>':''}</section><section class="inspector-block"><div class="eyebrow">Model verdict <em>not proof</em></div><p>${escapeHtml(c.label)}</p><small>These are model results, not an authorization or a guarantee.</small></section><section class="inspector-block"><div class="eyebrow">Nearest policy passage</div>${c.passage?'<blockquote>'+escapeHtml(c.passage)+'</blockquote>':'<p>No plausible matching passage found.</p>'}<small>Word-overlap hint, not model evidence or semantic verification. Numbers and names must match literally; paraphrases can produce false holds.</small></section>`;
+  document.querySelectorAll('[data-select-claim]').forEach(b=>b.onclick=()=>{selectedClaim=Number(b.dataset.selectClaim);renderInspector();renderDocument();});
+}
+function renderTicketFinding(guard) {
+  const box=$('#ticketFinding'); box.hidden=false;
+  if(guard.flagged===null){box.innerHTML='<b>INJECTION CHECK UNAVAILABLE</b><p>Unknown, not clear. A failed check is not evidence of an attack.</p>';return;}
+  if(!guard.flagged){box.innerHTML='<b>NO INJECTION FINDINGS</b><p>Model-reported, not proof. The customer’s request is preserved.</p>';return;}
+  const d=unwrap(latestAnalyze?.guard);box.innerHTML='<b>HIDDEN INSTRUCTION FLAGGED</b>'+evidenceList(d?.evidence)+'<p>The customer’s real request stays visible. This is a finding about the text, not a judgment about the customer.</p>';
+  $('#ticketRead').innerHTML=annotateQuotesHtml(ticketInput.value,d?.evidence);ticketInput.hidden=true;$('#ticketRead').hidden=false;
+  const edit=document.createElement('button');edit.className='text-btn';edit.textContent='Edit original ticket';edit.onclick=()=>{resetWorkspace();ticketInput.focus();};box.appendChild(edit);
+}
+$('#maskToggle').onclick=()=>{isMasked=!isMasked;$('#maskToggle').textContent=isMasked?'Show original':'Show masked';ticketInput.hidden=true;$('#ticketRead').hidden=false;$('#ticketRead').textContent=isMasked?maskedTicket:ticketInput.value;};
+$('#editDraftBtn').onclick=()=>{const editing=$('#draftInput').hidden;if(editing){resetWorkspace();$('#draftInput').hidden=false;$('#draftDocument').hidden=true;$('#editDraftBtn').textContent='Done editing';draftInput.focus();}else{$('#draftInput').hidden=true;$('#draftDocument').hidden=false;$('#editDraftBtn').textContent='Edit draft';renderDocument();}};
+$('#showEvidenceBtn').onclick=()=>{if(window.innerWidth<=900)setPane('evidence');else $('#claimInspector').scrollIntoView({block:'start',behavior:'smooth'});};
+document.querySelectorAll('[data-input-tab]').forEach(b=>b.onclick=()=>setInputTab(b.dataset.inputTab));
+document.querySelectorAll('[data-pane]').forEach(b=>b.onclick=()=>setPane(b.dataset.pane));
+for(const el of [ticketInput,policyInput,scriptInput,draftInput])el.addEventListener('input',()=>{if(reviewActive)return;uiClaims=[];results.hidden=true;$('#evidenceMode').textContent='Inputs changed';$('#claimInspector').innerHTML='<p class="empty-evidence">Inputs changed. Run a new review before using earlier findings.</p>';verdictBanner.className='verdict-banner idle';verdictBanner.innerHTML='<span class="decision-label">Decision</span><strong>Review needed</strong><span class="decision-detail">Inputs changed. Earlier findings no longer apply.</span>';renderDocument();});
+for(const id of ['attackBtn','cleanBtn','clearBtn']){const b=document.getElementById(id);b.addEventListener('click',()=>{if(reviewActive)return;document.querySelectorAll('.scenario').forEach(x=>x.classList.toggle('active',x.id===id));$('#dataMode').textContent=id==='clearBtn'?'Your inputs':'Synthetic example inputs';setPane('draft');});}
+const mobileExamples=document.createElement('div');mobileExamples.className='scenario-mobile';mobileExamples.innerHTML='<button data-sample="attackBtn">Late delivery sample</button><button data-sample="cleanBtn">Damaged item sample</button><button data-sample="clearBtn">New review</button>';
+$('#inputPane').prepend(mobileExamples);mobileExamples.querySelectorAll('button').forEach(b=>b.onclick=()=>{document.getElementById(b.dataset.sample).click();setPane('ticket');});
+if(window.innerWidth>900)mobileExamples.style.display='none';
+$('#attackBtn').click();
