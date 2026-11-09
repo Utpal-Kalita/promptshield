@@ -1,0 +1,10 @@
+name = "promptshield-api"
+main = "src/index.js"
+compatibility_date = "2026-11-09"
+
+[vars]
+ALLOWED_ORIGIN = "https://promptshield-24r.pages.dev"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "06ed28a452ff4c90bc9668a2f28dea6a"
