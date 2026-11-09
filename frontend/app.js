@@ -51,7 +51,7 @@ priya.nair@example.com
 Kochi`,
   draft: `Hi Priya,
 
-I'm sorry the lamp arrived with a cracked base. Since the lamp arrived damaged, you are due a full refund to your original payment method. You do not need to return the damaged lamp. Once approved, the refund is processed within 5 to 7 business days.
+I'm sorry the lamp arrived with a cracked base. I've checked order 48213 and here is what I can do: since the lamp arrived damaged, you are due a full refund to your original payment method, and you do not need to send the damaged lamp back. Once approved, the refund is processed within 5 to 7 business days.
 
 Is there anything else I can help with?`,
 };
@@ -320,7 +320,6 @@ function renderGuard(resp, ticket) {
   } else {
     html += `<p>No injection patterns detected, as far as this model can tell${prob != null ? ` (model-reported injection score: ${Math.round(prob * 100)}%)` : ''}. A clean result is not proof the ticket is safe.</p>`;
   }
-  html += probBars(d?.categories, flagged ? '#f87171' : '#6ee7b7');
   setBody(card, html);
   return { flagged };
 }
@@ -369,8 +368,7 @@ function renderInspect(resp, hadScript) {
   } else {
     card.classList.add('clean');
     setChip(card, 'No findings', 'ok');
-    setBody(card, `<p>No malicious behavior detected, as far as this model can tell${malProb != null ? ` (model-reported malicious score: ${Math.round(malProb * 100)}%)` : ''}. The script reads as ${escapeHtml(category || 'routine automation')}. A clean result is not proof it is safe.</p>` +
-      probBars(d?.categories, '#6ee7b7'));
+    setBody(card, `<p>No malicious behavior detected, as far as this model can tell${malProb != null ? ` (model-reported malicious score: ${Math.round(malProb * 100)}%)` : ''}. The script reads as ${escapeHtml(category || 'routine automation')}. A clean result is not proof it is safe.</p>`);
   }
   return { level };
 }
@@ -411,7 +409,7 @@ function closestPassage(claim, passages) {
 
 const VERIFY_TONE = { supported: 'ok', contradicted: 'bad', not_stated: 'warn', not_a_claim: '' };
 
-function renderVerify(ground) {
+function renderVerify(ground, draft) {
   const card = $('#cardVerify');
   const verify = ground && ground.verify;
   const rerank = ground && ground.rerank;
@@ -434,7 +432,9 @@ function renderVerify(ground) {
     return { claims: 'unknown' };
   }
 
-  let html = '<p class="caveat">Each claim in the draft, checked against the policy. Verdicts are model-reported and can be wrong; passage hints come from word overlap, not from the model. A claim the evidence cannot back is <b>unverified</b> - it is never shown green.</p><ul class="claim-list">';
+  let html = '<div class="diff-col" style="margin-bottom:12px"><h3>The draft under review</h3>' +
+    `<div class="diff-view">${escapeHtml(draft)}</div></div>` +
+    '<p class="caveat">Each claim in the draft, checked against the policy. Verdicts are model-reported and can be wrong; passage hints come from word overlap, not from the model. A claim the evidence cannot back is <b>unverified</b> - it is never shown green.</p><ul class="claim-list">';
   for (const c of claims) {
     const cv = String(c.verdict || 'not_stated');
     if (cv === 'contradicted') contradictedCount++;
@@ -609,7 +609,7 @@ reviewBtn.addEventListener('click', async () => {
   const guard = analyze ? renderGuard(analyze.guard || null, ticket) : { ...apiUnavailable($('#cardGuard'), null, 'injection screen'), flagged: null };
   const protect = analyze ? renderProtect(analyze.protect || null, ticket) : { ...apiUnavailable($('#cardProtect'), null, 'private-data scan'), found: 0, unavailable: true };
   const inspect = renderInspect(analyze ? (analyze.inspect || analyze.script || null) : null, Boolean(script));
-  const verify = ground ? renderVerify(ground) : { ...apiUnavailable($('#cardVerify'), null, 'policy grounding'), claims: 'unknown' };
+  const verify = ground ? renderVerify(ground, draft) : { ...apiUnavailable($('#cardVerify'), null, 'policy grounding'), claims: 'unknown' };
 
   renderVerdict({ guard, protect, verify, inspect, scriptRan: Boolean(script) });
 
