@@ -40,3 +40,7 @@ Serve `frontend/` with any static server and point `API_BASE` in `frontend/app.j
 
 - `prd.md` - product requirements
 - `resources.md` - APIs, infrastructure and tools used
+
+## Design and third-party credits
+
+The paper-document review direction was generated with Lovable on November 9, 2026, then adapted to the existing real Clocked integration. The generated synthetic review engine was not used. The interface uses IBM Plex Sans and IBM Plex Mono (IBM) and Newsreader (Production Type), served through Google Fonts under their open font licenses. The app, worker and test logic were developed with AI coding assistance. All ticket examples are synthetic. No customer record or private credential was uploaded to the design generator.
