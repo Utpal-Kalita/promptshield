@@ -1,0 +1,15 @@
+import fs from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const source=await fs.readFile(new URL('../worker/src/index.js',import.meta.url),'utf8');
+const {ClockedQueue}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+let active=0,maxActive=0,calls=0;
+globalThis.fetch=async()=>{active++;maxActive=Math.max(maxActive,active);calls++;await new Promise(r=>setTimeout(r,5));active--;return Response.json({status:'test'});};
+const queue=new ClockedQueue({}, {CLOCKED_API_KEY:'synthetic-test-key'});
+const results=await Promise.all(Array.from({length:15},(_,i)=>queue.fetch(new Request('https://internal/call',{method:'POST',body:JSON.stringify({path:'/pii',payload:{text:'synthetic '+i},idemKey:crypto.randomUUID()})}))));
+assert.equal(maxActive,1);assert.equal(calls,15);assert(results.every(x=>x.ok));assert.equal(queue.pending,0);
+console.log('15 simultaneous requests: max upstream concurrency 1, all drained');
+let attempt=0;
+globalThis.fetch=async()=>{if(++attempt===1)throw new Error('test');return Response.json({status:'next'});};
+const r1=await queue.fetch(new Request('https://internal/call',{method:'POST',body:JSON.stringify({path:'/pii',payload:{},idemKey:crypto.randomUUID()})}));
+const r2=await queue.fetch(new Request('https://internal/call',{method:'POST',body:JSON.stringify({path:'/pii',payload:{},idemKey:crypto.randomUUID()})}));
+assert.equal(r1.status,502);assert.equal(r2.status,200);console.log('Failure remains unavailable; later queued request proceeds; no retry');
