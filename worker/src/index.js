@@ -94,7 +94,9 @@ async function clockedCall(env, path, payload, idemKey) {
 
 export default {
   async fetch(request, env) {
-    const origin = env.ALLOWED_ORIGIN || '*';
+    const allowed = String(env.ALLOWED_ORIGIN || '*').split(',').map((s) => s.trim()).filter(Boolean);
+    const reqOrigin = request.headers.get('Origin') || '';
+    const origin = allowed.includes('*') ? '*' : (allowed.includes(reqOrigin) ? reqOrigin : allowed[0]);
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -217,4 +219,4 @@ async function handleGround(request, env, origin) {
   });
 
   return json(result, anyFailure ? 502 : 200, origin);
-}
+        }
