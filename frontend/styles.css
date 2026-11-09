@@ -175,4 +175,15 @@ button.ghost:hover { border-color: var(--accent); }
 .inj {
   background: rgba(248,113,113,.18); color: #fecaca;
   border-left: 3px solid var(--bad); border-radius: 3px; padding: 0 3px;
-  }
+}
+
+/* progressive disclosure */
+details.rail-step > summary.step-head { cursor: pointer; list-style: none; }
+details.rail-step > summary.step-head::-webkit-details-marker { display: none; }
+details.rail-step > summary.step-head::after {
+  content: "+"; margin-left: 8px; color: var(--muted); font-weight: 700;
+}
+details.rail-step[open] > summary.step-head::after { content: "\2212"; }
+details.rail-step > .step-body { margin-top: 12px; }
+.draft-review { margin: 0 0 20px 22px; }
+.draft-review h3 { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; text-transform: uppercase; letter-spacing: .6px; }
