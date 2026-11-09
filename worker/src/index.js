@@ -65,7 +65,7 @@ function splitPassages(text) {
   return passages;
 }
 
-async function clockedCall(env, path, payload, idemKey) {
+async function directClockedCall(env, path, payload, idemKey) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45000);
   try {
@@ -89,6 +89,40 @@ async function clockedCall(env, path, payload, idemKey) {
     return { ok: res.ok, status: res.status, data: parsed };
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// One account-wide singleton serializes outbound requests across visitors and
+// Worker instances. Never retry automatically: unavailable stays unavailable.
+async function clockedCall(env, path, payload, idemKey) {
+  if (!env.CLOCKED_QUEUE) throw new Error('request queue unavailable');
+  const stub = env.CLOCKED_QUEUE.get(env.CLOCKED_QUEUE.idFromName('clocked-account'));
+  const response = await stub.fetch('https://queue.internal/call', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path, payload, idemKey})
+  });
+  if (!response.ok) throw new Error('request queue unavailable');
+  return response.json();
+}
+
+export class ClockedQueue {
+  constructor(ctx, env) {
+    this.env = env;
+    this.tail = Promise.resolve();
+    this.pending = 0;
+  }
+  async fetch(request) {
+    const input = await request.json();
+    if (!['/pii','/injection','/script','/grounding','/rerank'].includes(input.path)) {
+      return new Response('invalid endpoint', {status:400});
+    }
+    if (this.pending >= 20) return new Response('queue full', {status:503});
+    this.pending++;
+    const job = this.tail.then(() => directClockedCall(this.env, input.path, input.payload, input.idemKey));
+    this.tail = job.catch(() => {});
+    try { return Response.json(await job); }
+    catch { return new Response('upstream unavailable', {status:502}); }
+    finally { this.pending--; }
   }
 }
 
@@ -219,4 +253,4 @@ async function handleGround(request, env, origin) {
   });
 
   return json(result, anyFailure ? 502 : 200, origin);
-        }
+}
