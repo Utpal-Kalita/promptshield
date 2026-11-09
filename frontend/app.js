@@ -409,7 +409,7 @@ function closestPassage(claim, passages) {
 
 const VERIFY_TONE = { supported: 'ok', contradicted: 'bad', not_stated: 'warn', not_a_claim: '' };
 
-function renderVerify(ground, draft) {
+function renderVerify(ground) {
   const card = $('#cardVerify');
   const verify = ground && ground.verify;
   const rerank = ground && ground.rerank;
@@ -424,6 +424,7 @@ function renderVerify(ground, draft) {
   let unverifiedCount = 0;
   let contradictedCount = 0;
   let notStatedCount = 0;
+  let issueClaims = 0;
 
   if (claims.length === 0) {
     card.classList.add('flagged');
@@ -432,9 +433,7 @@ function renderVerify(ground, draft) {
     return { claims: 'unknown' };
   }
 
-  let html = '<div class="diff-col" style="margin-bottom:12px"><h3>The draft under review</h3>' +
-    `<div class="diff-view">${escapeHtml(draft)}</div></div>` +
-    '<p class="caveat">Each claim in the draft, checked against the policy. Verdicts are model-reported and can be wrong; passage hints come from word overlap, not from the model. A claim the evidence cannot back is <b>unverified</b> - it is never shown green.</p><ul class="claim-list">';
+  let html = '<p class="caveat">Each claim in the draft, checked against the policy. Verdicts are model-reported and can be wrong; passage hints come from word overlap, not from the model. A claim the evidence cannot back is <b>unverified</b> - it is never shown green.</p><ul class="claim-list">';
   for (const c of claims) {
     const cv = String(c.verdict || 'not_stated');
     if (cv === 'contradicted') contradictedCount++;
@@ -444,6 +443,7 @@ function renderVerify(ground, draft) {
     const tokenMiss = tokens.length > 0 && (!near || !tokens.every((t) => near.toLowerCase().includes(t)));
     const unverified = (cv === 'supported' || cv === 'contradicted') && (!near || tokenMiss);
     if (unverified) unverifiedCount++;
+    if (unverified || cv === 'contradicted' || cv === 'not_stated') issueClaims++;
     const tone = unverified ? 'warn' : (VERIFY_TONE[cv] || '');
     const label = 'model: ' + cv.replace(/_/g, ' ') + (unverified ? ' (unverified)' : '');
     const src = near
@@ -473,14 +473,15 @@ function renderVerify(ground, draft) {
     }
   }
 
-  const clean = contradictedCount === 0 && notStatedCount === 0 && unverifiedCount === 0;
+  const clean = issueClaims === 0;
   card.classList.add(clean ? 'clean' : 'flagged');
   setChip(card,
-    clean ? 'No findings' : `${contradictedCount + notStatedCount + unverifiedCount} claim${contradictedCount + notStatedCount + unverifiedCount === 1 ? '' : 's'} need review`,
+    clean ? 'No findings' : `${issueClaims} claim${issueClaims === 1 ? '' : 's'} need review`,
     clean ? 'ok' : 'warn');
   setBody(card, html);
   return {
     claims: clean ? 'clean' : 'issues',
+    issueClaims,
     contradicted: contradictedCount,
     notStated: notStatedCount,
     unverified: unverifiedCount,
@@ -513,7 +514,7 @@ function renderVerdict({ guard, protect, verify, inspect, scriptRan }) {
     if (verify.contradicted) bits.push(`${verify.contradicted} contradicted by the policy`);
     if (verify.notStated) bits.push(`${verify.notStated} not in the policy at all`);
     if (verify.unverified) bits.push(`${verify.unverified} unverified (no backing evidence)`);
-    reasons.push(`The draft makes claims the policy does not back: ${bits.join(', ')}. See step 3.`);
+    reasons.push(`${verify.issueClaims} claim${verify.issueClaims === 1 ? '' : 's'} in the draft need review: ${bits.join(', ')}. See step 3.`);
   }
   if (scriptRan && inspect.level === 'suspicious') {
     if (state === 'ok') state = 'warn';
@@ -609,9 +610,20 @@ reviewBtn.addEventListener('click', async () => {
   const guard = analyze ? renderGuard(analyze.guard || null, ticket) : { ...apiUnavailable($('#cardGuard'), null, 'injection screen'), flagged: null };
   const protect = analyze ? renderProtect(analyze.protect || null, ticket) : { ...apiUnavailable($('#cardProtect'), null, 'private-data scan'), found: 0, unavailable: true };
   const inspect = renderInspect(analyze ? (analyze.inspect || analyze.script || null) : null, Boolean(script));
-  const verify = ground ? renderVerify(ground, draft) : { ...apiUnavailable($('#cardVerify'), null, 'policy grounding'), claims: 'unknown' };
+  const verify = ground ? renderVerify(ground) : { ...apiUnavailable($('#cardVerify'), null, 'policy grounding'), claims: 'unknown' };
+
+  const draftReview = $('#draftReview');
+  draftReview.hidden = false;
+  draftReview.innerHTML = '<h3>The draft under review</h3>' +
+    `<div class="diff-view">${escapeHtml(draft)}</div>`;
 
   renderVerdict({ guard, protect, verify, inspect, scriptRan: Boolean(script) });
+
+  // Progressive disclosure: findings open, clean checks stay collapsed.
+  for (const id of ['cardGuard', 'cardProtect', 'cardVerify', 'cardInspect']) {
+    const card = document.getElementById(id);
+    card.open = card.classList.contains('flagged');
+  }
 
   if (failures.length) {
     showError(`Part of the review failed: ${failures.join('; ')}. The affected checks are marked unavailable - nothing was treated as safe or as an attack because of that failure.`);
