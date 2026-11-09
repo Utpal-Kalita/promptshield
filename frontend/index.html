@@ -1,131 +1,18 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PromptShield - pre-send review for AI support replies</title>
-  <meta name="description" content="PromptShield reviews an AI agent's draft support reply before it reaches the customer: injection screening, PII masking, script inspection and policy grounding, with a human making the final call." />
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PromptShield - support reply review</title>
+<meta name="description" content="Review an AI support draft against your policy, with model findings and a human final decision.">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="site-header">
-    <div class="wrap">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">PS</span>
-        <div>
-          <h1>PromptShield</h1>
-          <p class="tagline">Pre-send review for AI support replies</p>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="intro">
-      <p>
-        Your support agent drafted a reply to a customer. Before anyone sends it, PromptShield
-        screens the ticket for hidden instructions, masks private data, inspects any script the
-        conversation carries, and checks every claim in the draft against your policy.
-        It gives one recommendation with the evidence. <strong>A human always makes the final call -
-        PromptShield sends nothing.</strong>
-      </p>
-    </section>
-
-    <section class="panel">
-      <div class="field">
-        <div class="field-head">
-          <label for="ticketInput">1 · Customer ticket</label>
-          <span class="count" id="ticketCount">0</span>
-        </div>
-        <textarea id="ticketInput" rows="5" placeholder="Paste the incoming customer message the agent is replying to." spellcheck="false"></textarea>
-      </div>
-
-      <div class="field">
-        <div class="field-head">
-          <label for="draftInput">2 · AI draft reply</label>
-          <span class="count" id="draftCount">0</span>
-        </div>
-        <textarea id="draftInput" rows="4" placeholder="Paste the reply the agent drafted." spellcheck="false"></textarea>
-      </div>
-
-      <div class="field">
-        <div class="field-head">
-          <label for="policyInput">3 · Policy the reply must follow</label>
-          <span class="count" id="policyCount">0 / 20,000</span>
-        </div>
-        <textarea id="policyInput" rows="4" placeholder="Paste the refund policy, terms or help-center article the reply must stay true to." spellcheck="false"></textarea>
-      </div>
-
-      <div class="field">
-        <div class="field-head">
-          <label for="scriptInput">4 · Script or commands <span class="optional">optional</span></label>
-          <span class="count" id="scriptCount">0</span>
-        </div>
-        <textarea id="scriptInput" rows="3" placeholder="If the ticket or reply includes a script or shell commands, paste them here. Fenced code blocks in the ticket or draft are picked up automatically." spellcheck="false"></textarea>
-      </div>
-
-      <div class="actions">
-        <button id="reviewBtn" class="primary">Review this reply</button>
-        <button id="attackBtn" class="ghost">Load attack scenario</button>
-        <button id="cleanBtn" class="ghost">Load clean scenario</button>
-        <button id="clearBtn" class="ghost">Clear</button>
-      </div>
-      <div id="errorBox" class="error-box" hidden></div>
-    </section>
-
-    <section id="results" class="results" hidden>
-      <div id="verdictBanner" class="verdict-banner"></div>
-      <p class="verdict-note">
-        This is a recommendation, not an authorization. Verdicts are model-reported scores and can be
-        wrong. PromptShield has no connection to any helpdesk and never sends, edits or deletes anything.
-      </p>
-
-      <div id="draftReview" class="draft-review" hidden></div>
-
-      <ol class="rail">
-        <details class="rail-step" id="cardGuard">
-          <summary class="step-head">
-            <span class="step-no">1</span>
-            <h2>Injection screen <span class="endpoint">Clocked Guard</span></h2>
-            <span class="chip" data-role="chip">…</span>
-          </summary>
-          <div class="step-body" data-role="body"></div>
-        </details>
-        <details class="rail-step" id="cardProtect">
-          <summary class="step-head">
-            <span class="step-no">2</span>
-            <h2>Private data <span class="endpoint">Clocked Protect</span></h2>
-            <span class="chip" data-role="chip">…</span>
-          </summary>
-          <div class="step-body" data-role="body"></div>
-        </details>
-        <details class="rail-step" id="cardVerify">
-          <summary class="step-head">
-            <span class="step-no">3</span>
-            <h2>Policy grounding <span class="endpoint">Clocked Verify + Rerank</span></h2>
-            <span class="chip" data-role="chip">…</span>
-          </summary>
-          <div class="step-body" data-role="body"></div>
-        </details>
-      <details class="rail-step" id="cardInspect">
-          <summary class="step-head">
-            <span class="step-no">4</span>
-            <h2>Script inspection <span class="endpoint">Clocked Inspect</span></h2>
-            <span class="chip" data-role="chip">…</span>
-          </summary>
-          <div class="step-body" data-role="body"></div>
-        </details>
-        </ol>
-    </section>
-
-    <footer class="site-footer">
-      <p>
-        Built for the Clocked Build Challenge on Clocked's Protect, Guard, Inspect, Verify and Rerank
-        endpoints. Demo capacity is limited; all examples are synthetic.
-      </p>
-    </footer>
-  </main>
-
-  <script src="app.js"></script>
-</body>
-          </html>
+<header class="app-header"><div class="brand">PromptShield <span>Pre-send review</span></div><div class="mode-label">Clocked models <span id="dataMode">Synthetic example inputs</span></div><button id="reviewBtn" class="primary">Review reply <kbd>⌘ ↵</kbd></button></header>
+<div class="workspace">
+<nav class="scenario-rail" aria-label="Review scenarios"><button id="clearBtn" class="new-review">＋ New review</button><div class="rail-label">Sample tickets</div><button id="attackBtn" class="scenario active"><span class="scenario-icon">↳</span><span>Late delivery<small>Hidden instruction + script</small></span></button><button id="cleanBtn" class="scenario"><span class="scenario-icon">↳</span><span>Damaged item<small>Paraphrase regression</small></span></button><div class="rail-note">Examples are synthetic.<br>Review runs use live models.<br><br>No helpdesk connected.<br>Nothing is sent or executed.</div><a href="https://github.com/Utpal-Kalita/promptshield" target="_blank" rel="noreferrer" class="repo-link">Source & limitations ↗</a></nav>
+<section class="input-pane" id="inputPane" aria-label="Source documents"><div class="pane-tabs"><button data-input-tab="ticket" class="active">Ticket</button><button data-input-tab="policy">Policy</button><button data-input-tab="script">Code</button><button id="maskToggle" class="text-btn" hidden>Show masked</button></div><div class="input-section" data-input-section="ticket"><div class="field-label"><label for="ticketInput">Customer ticket</label><span id="ticketCount"></span></div><textarea id="ticketInput" spellcheck="false" placeholder="Paste the customer's message."></textarea><div id="ticketRead" class="ticket-read" hidden></div><div id="ticketFinding" class="ticket-finding" hidden></div></div><div class="input-section" data-input-section="policy" hidden><div class="field-label"><label for="policyInput">Supplied policy</label><span id="policyCount"></span></div><textarea id="policyInput" spellcheck="false" placeholder="Paste the refund policy or help-center passages."></textarea><p class="pane-note">The draft is checked only against this text. Missing or outdated policies can produce misleading results.</p></div><div class="input-section" data-input-section="script" hidden><div class="field-label"><label for="scriptInput">Optional script</label><span id="scriptCount"></span></div><textarea id="scriptInput" spellcheck="false" placeholder="Paste code for static inspection only. Fenced code in the ticket or draft is picked up automatically."></textarea><p class="pane-note">Never executed. Scripts are sent as text to Clocked Inspect. Fenced code is picked up automatically.</p></div></section>
+<main class="document-pane" id="documentPane"><div id="errorBox" role="alert" class="error-box" hidden></div><div class="document-scroll"><article class="reply-paper"><div class="paper-top"><span>AI draft reply · not sent</span><button id="editDraftBtn" class="text-btn">Edit draft</button></div><div class="paper-meta"><span>Context</span><div>Draft under review</div><span>Audience</span><div>Customer support</div></div><div class="draft-area"><textarea id="draftInput" spellcheck="false" aria-label="AI draft reply" placeholder="Paste the AI-generated reply here." hidden></textarea><div id="draftDocument" class="draft-document"></div></div><div class="paper-footer">Human review comes before sending.</div></article><p class="document-note">Model findings, not guarantees. PromptShield never sends a reply.</p></div><section class="decision-strip" aria-label="Review recommendation"><div id="verdictBanner" class="verdict-banner idle"><span class="decision-label">Decision</span><strong>Not reviewed</strong><span class="decision-detail">Review the draft before deciding what to send.</span></div><button id="showEvidenceBtn" class="text-btn">Open evidence →</button></section></main>
+<aside class="evidence-pane" id="evidencePane" aria-label="Review evidence"><div class="evidence-title"><span>Evidence inspector</span><span id="evidenceMode">Awaiting review</span></div><div class="evidence-scroll"><div id="claimInspector"><p class="empty-evidence">Run a review to inspect the draft's claims beside policy passage hints.</p></div><section id="results" hidden><div class="checks-heading">Model checks <span>Clocked</span></div><div id="draftReview" hidden></div><ol class="rail"><details class="rail-step" id="cardGuard"><summary><span class="check-name">Guard</span><span class="chip" data-role="chip">…</span></summary><div class="step-body" data-role="body"></div></details><details class="rail-step" id="cardProtect"><summary><span class="check-name">Protect</span><span class="chip" data-role="chip">…</span></summary><div class="step-body" data-role="body"></div></details><details class="rail-step" id="cardVerify"><summary><span class="check-name">Verify + Rerank</span><span class="chip" data-role="chip">…</span></summary><div class="step-body" data-role="body"></div></details><details class="rail-step" id="cardInspect"><summary><span class="check-name">Inspect</span><span class="chip" data-role="chip">…</span></summary><div class="step-body" data-role="body"></div></details></ol></section><p class="evidence-caveat">A failed check is unavailable, never a pass or an attack finding. Policy passage hints use word overlap, not semantic proof. Ordinary paraphrases can be held for human review.</p></div></aside>
+</div><nav class="mobile-nav" aria-label="Workspace panes"><button data-pane="draft" class="active">Draft</button><button data-pane="ticket">Ticket</button><button data-pane="policy">Policy</button><button data-pane="evidence">Evidence</button></nav>
+<script src="app.js"></script>
+</body></html>
