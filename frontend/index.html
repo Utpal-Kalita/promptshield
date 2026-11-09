@@ -37,7 +37,7 @@
           <label for="ticketInput">1 · Customer ticket</label>
           <span class="count" id="ticketCount">0</span>
         </div>
-        <textarea id="ticketInput" rows="7" placeholder="Paste the incoming customer message the agent is replying to." spellcheck="false"></textarea>
+        <textarea id="ticketInput" rows="5" placeholder="Paste the incoming customer message the agent is replying to." spellcheck="false"></textarea>
       </div>
 
       <div class="field">
@@ -45,7 +45,7 @@
           <label for="draftInput">2 · AI draft reply</label>
           <span class="count" id="draftCount">0</span>
         </div>
-        <textarea id="draftInput" rows="6" placeholder="Paste the reply the agent drafted." spellcheck="false"></textarea>
+        <textarea id="draftInput" rows="4" placeholder="Paste the reply the agent drafted." spellcheck="false"></textarea>
       </div>
 
       <div class="field">
@@ -53,7 +53,7 @@
           <label for="policyInput">3 · Policy the reply must follow</label>
           <span class="count" id="policyCount">0 / 20,000</span>
         </div>
-        <textarea id="policyInput" rows="6" placeholder="Paste the refund policy, terms or help-center article the reply must stay true to." spellcheck="false"></textarea>
+        <textarea id="policyInput" rows="4" placeholder="Paste the refund policy, terms or help-center article the reply must stay true to." spellcheck="false"></textarea>
       </div>
 
       <div class="field">
@@ -61,7 +61,7 @@
           <label for="scriptInput">4 · Script or commands <span class="optional">optional</span></label>
           <span class="count" id="scriptCount">0</span>
         </div>
-        <textarea id="scriptInput" rows="4" placeholder="If the ticket or reply includes a script or shell commands, paste them here. Fenced code blocks in the ticket or draft are picked up automatically." spellcheck="false"></textarea>
+        <textarea id="scriptInput" rows="3" placeholder="If the ticket or reply includes a script or shell commands, paste them here. Fenced code blocks in the ticket or draft are picked up automatically." spellcheck="false"></textarea>
       </div>
 
       <div class="actions">
@@ -80,39 +80,41 @@
         wrong. PromptShield has no connection to any helpdesk and never sends, edits or deletes anything.
       </p>
 
+      <div id="draftReview" class="draft-review" hidden></div>
+
       <ol class="rail">
-        <li class="rail-step" id="cardGuard">
-          <div class="step-head">
+        <details class="rail-step" id="cardGuard">
+          <summary class="step-head">
             <span class="step-no">1</span>
             <h2>Injection screen <span class="endpoint">Clocked Guard</span></h2>
             <span class="chip" data-role="chip">…</span>
-          </div>
+          </summary>
           <div class="step-body" data-role="body"></div>
-        </li>
-        <li class="rail-step" id="cardProtect">
-          <div class="step-head">
+        </details>
+        <details class="rail-step" id="cardProtect">
+          <summary class="step-head">
             <span class="step-no">2</span>
             <h2>Private data <span class="endpoint">Clocked Protect</span></h2>
             <span class="chip" data-role="chip">…</span>
-          </div>
+          </summary>
           <div class="step-body" data-role="body"></div>
-        </li>
-        <li class="rail-step" id="cardVerify">
-          <div class="step-head">
+        </details>
+        <details class="rail-step" id="cardVerify">
+          <summary class="step-head">
             <span class="step-no">3</span>
             <h2>Policy grounding <span class="endpoint">Clocked Verify + Rerank</span></h2>
             <span class="chip" data-role="chip">…</span>
-          </div>
+          </summary>
           <div class="step-body" data-role="body"></div>
-        </li>
-      <li class="rail-step" id="cardInspect">
-          <div class="step-head">
+        </details>
+      <details class="rail-step" id="cardInspect">
+          <summary class="step-head">
             <span class="step-no">4</span>
             <h2>Script inspection <span class="endpoint">Clocked Inspect</span></h2>
             <span class="chip" data-role="chip">…</span>
-          </div>
+          </summary>
           <div class="step-body" data-role="body"></div>
-        </li>
+        </details>
         </ol>
     </section>
 
@@ -126,4 +128,4 @@
 
   <script src="app.js"></script>
 </body>
-</html>
+          </html>
